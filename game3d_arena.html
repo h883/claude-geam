@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>コインアリーナ DX - P2P対戦シューター</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#070b18;font-family:"Segoe UI",sans-serif;color:#fff;cursor:crosshair;}
+  #ui{position:fixed;top:10px;left:0;right:0;z-index:10;text-align:center;text-shadow:0 2px 6px rgba(0,0,0,.6);user-select:none;pointer-events:none;}
+  #rounds{font-size:15px;letter-spacing:2px;opacity:.9;}
+  #score{font-size:24px;font-weight:bold;}
+  #score .you{color:#5fe0ff;} #score .riv{color:#ff77d6;}
+  #timer{font-size:18px;opacity:.9;margin-top:2px;}
+  #combo{font-size:16px;color:#ffd451;height:20px;margin-top:2px;font-weight:bold;}
+  #buffs{position:fixed;top:118px;left:0;right:0;text-align:center;font-size:20px;z-index:10;height:26px;pointer-events:none;}
+  #flash{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:52px;font-weight:bold;
+    z-index:15;pointer-events:none;opacity:0;text-shadow:0 4px 20px rgba(0,0,0,.7);transition:opacity .2s;text-align:center;}
+  #dash{position:fixed;bottom:12px;left:0;right:0;text-align:center;font-size:13px;opacity:.85;z-index:10;pointer-events:none;}
+  #hint{font-size:12px;opacity:.7;margin-top:3px;}
+  #overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    z-index:20;background:rgba(5,8,20,.93);text-align:center;padding:18px;box-sizing:border-box;overflow:auto;cursor:default;}
+  #overlay.hidden{display:none;}
+  h2{font-size:30px;margin:0 0 4px;}
+  small{opacity:.78;max-width:520px;line-height:1.6;}
+  .legend{display:flex;gap:10px;justify-content:center;margin-top:8px;font-size:12px;flex-wrap:wrap;opacity:.85;}
+  .panel{background:#121a35;border:1px solid #2a3a66;border-radius:14px;padding:18px;margin-top:14px;max-width:460px;width:100%;}
+  input{font-size:18px;text-align:center;padding:9px;border-radius:10px;border:1px solid #2a3a66;background:#0a1330;color:#9fd;width:200px;}
+  input#joinInput{font-size:28px;letter-spacing:8px;text-transform:uppercase;width:170px;}
+  button{padding:11px 24px;font-size:15px;cursor:pointer;border:none;border-radius:26px;color:#06122a;font-weight:bold;
+    background:linear-gradient(135deg,#ffd86b,#ff9f43);margin:7px 5px;}
+  button.sec{background:linear-gradient(135deg,#7fd6ff,#4f9fff);}
+  button:active{transform:scale(.96);}
+  .code{font-size:38px;letter-spacing:10px;font-weight:bold;color:#ffd451;margin:8px 0;}
+  .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;align-items:center;}
+  .step{display:none;} .step.on{display:block;}
+  #status,#status2{margin-top:10px;font-size:14px;opacity:.9;min-height:20px;}
+  .swatches{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:8px 0;}
+  .sw{width:34px;height:34px;border-radius:8px;cursor:pointer;border:3px solid transparent;}
+  .sw.on{border-color:#fff;}
+  label.lbl{font-size:13px;opacity:.85;display:block;margin-top:6px;}
+</style>
+</head>
+<body>
+<div id="ui">
+  <div id="rounds">ROUND 1</div>
+  <div id="score"><span class="you">YOU 0</span> &nbsp;—&nbsp; <span class="riv">0 RIVAL</span></div>
+  <div id="timer">⏱ 60</div>
+  <div id="combo"></div>
+</div>
+<div id="buffs"></div>
+<div id="flash"></div>
+<div id="dash">移動 WASD　|　狙う🖱マウス　|　撃つ クリック / Space　|　回避ダッシュ Shift（無敵）
+  <div id="hint">コイン集め＋撃ち合いで撃破。中央の🔥溶岩は触れるとダメージ。パワーアップで逆転！</div>
+</div>
+
+<div id="overlay">
+  <h2>🔫 コインアリーナ DX</h2>
+  <small>2人対戦・3本勝負のツインスティック・シューター。マウスで狙って撃ち合い、コインを集め、相手を撃破せよ。回避ダッシュとパワーアップで立ち回れ！</small>
+  <div class="legend"><span>👟速度</span><span>🛡シールド</span><span>🧲磁石</span><span>🔥連射</span><span>☄3way</span><span>❤回復</span><span>💀撃破+25</span></div>
+
+  <div class="panel step on" id="menuStep">
+    <label class="lbl">ユーザーネーム</label>
+    <input id="nameInput" maxlength="10" placeholder="名前を入力">
+    <label class="lbl">キューブの色</label>
+    <div class="swatches" id="swatches"></div>
+    <hr style="border-color:#2a3a66;margin:14px 0;">
+    <div class="row"><button id="makeRoom">部屋を作る</button></div>
+    <div style="margin:10px 0;opacity:.6;">— または —</div>
+    <div class="row"><input id="joinInput" maxlength="4" placeholder="CODE"></div>
+    <div class="row"><button class="sec" id="joinRoom">参加する</button></div>
+    <div id="status"></div>
+  </div>
+  <div class="panel step" id="waitStep">
+    <p>このコードを相手に伝えてね</p>
+    <div class="code" id="roomCode">----</div>
+    <div id="status2">相手の参加を待っています…</div>
+  </div>
+  <div class="panel step" id="resultStep">
+    <h2 id="resultTitle">結果</h2>
+    <p id="resultMsg"></p>
+    <button id="againBtn">もう一度</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+/* ===== audio ===== */
+let actx; function ac(){ if(!actx) actx=new (window.AudioContext||window.webkitAudioContext)(); return actx; }
+function beep(freq,dur=.1,type='square',vol=.18,slide=0){ try{const a=ac();const o=a.createOscillator(),g=a.createGain();
+  o.type=type;o.frequency.value=freq; if(slide)o.frequency.exponentialRampToValueAtTime(freq*slide,a.currentTime+dur);
+  g.gain.setValueAtTime(vol,a.currentTime);g.gain.exponentialRampToValueAtTime(.0001,a.currentTime+dur);
+  o.connect(g).connect(a.destination);o.start();o.stop(a.currentTime+dur);}catch(e){} }
+const SFX={ coin:()=>{beep(880,.07,'square',.13);beep(1320,.09,'square',.1);}, shoot:()=>beep(680,.07,'square',.1,.5),
+  dash:()=>beep(260,.16,'sawtooth',.16,2.4), hurt:()=>beep(160,.18,'sawtooth',.22,.5), lava:()=>beep(90,.12,'sawtooth',.2),
+  power:()=>{beep(520,.08,'triangle',.2);setTimeout(()=>beep(820,.12,'triangle',.2),70);},
+  kill:()=>{[200,150,400,800,1200].forEach((f,i)=>setTimeout(()=>beep(f,.11,'sawtooth',.24),i*55));},
+  win:()=>{[523,659,784,1046].forEach((f,i)=>setTimeout(()=>beep(f,.18,'triangle',.22),i*120));},
+  lose:()=>{[400,330,260].forEach((f,i)=>setTimeout(()=>beep(f,.22,'sawtooth',.2),i*140));}, round:()=>beep(660,.12,'triangle',.2)};
+
+/* ===== three ===== */
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x070b18);
+scene.fog=new THREE.Fog(0x070b18,34,60);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,200);
+const CAMBASE=new THREE.Vector3(0,24,18);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true; document.body.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0x88aaff,0x223044,.85));
+const dl=new THREE.DirectionalLight(0xffffff,1.05); dl.position.set(10,24,10); dl.castShadow=true;
+dl.shadow.mapSize.set(2048,2048); Object.assign(dl.shadow.camera,{left:-26,right:26,top:26,bottom:-26}); scene.add(dl);
+
+const ARENA=22;
+const floor=new THREE.Mesh(new THREE.BoxGeometry(ARENA,1,ARENA),new THREE.MeshStandardMaterial({color:0x141d3a,roughness:.95}));
+floor.position.y=-.5; floor.receiveShadow=true; scene.add(floor);
+const grid=new THREE.GridHelper(ARENA,22,0x2a3f7a,0x1c2a55); grid.position.y=.02; scene.add(grid);
+const wallMat=new THREE.MeshStandardMaterial({color:0x3a4f8a,emissive:0x14224a});
+for(const [x,z,sx,sz] of [[0,ARENA/2,ARENA,1],[0,-ARENA/2,ARENA,1],[ARENA/2,0,1,ARENA],[-ARENA/2,0,1,ARENA]])
+  {const w=new THREE.Mesh(new THREE.BoxGeometry(sx,1.5,sz),wallMat);w.position.set(x,.5,z);scene.add(w);}
+/* center lava hazard */
+const LAVA_R=3.0;
+const lava=new THREE.Mesh(new THREE.CircleGeometry(LAVA_R,40),new THREE.MeshStandardMaterial({color:0xff5a1e,emissive:0xff3300,emissiveIntensity:.7}));
+lava.rotation.x=-Math.PI/2; lava.position.y=.04; scene.add(lava);
+const lavaRing=new THREE.Mesh(new THREE.TorusGeometry(LAVA_R,.12,8,40),new THREE.MeshBasicMaterial({color:0xffaa33}));
+lavaRing.rotation.x=-Math.PI/2; lavaRing.position.y=.06; scene.add(lavaRing);
+const lavaLight=new THREE.PointLight(0xff5500,1.2,12); lavaLight.position.set(0,2,0); scene.add(lavaLight);
+
+/* label + hp */
+function makeLabel(){ const cv=document.createElement('canvas'); cv.width=256; cv.height=64;
+  const tx=new THREE.CanvasTexture(cv); const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tx,depthTest:false}));
+  sp.scale.set(3.4,.85,1); sp.position.y=1.7; sp.userData={cv,tx}; return sp; }
+function setLabel(sp,text,color){ const {cv,tx}=sp.userData; const c=cv.getContext('2d');
+  c.clearRect(0,0,256,64); c.font='bold 34px Segoe UI'; c.textAlign='center'; c.textBaseline='middle';
+  c.lineWidth=6; c.strokeStyle='rgba(0,0,0,.85)'; c.strokeText(text,128,32); c.fillStyle=color; c.fillText(text,128,32); tx.needsUpdate=true; }
+function makeHP(){ const g=new THREE.Group(); const bg=new THREE.Mesh(new THREE.PlaneGeometry(1.4,.18),new THREE.MeshBasicMaterial({color:0x551122,depthTest:false}));
+  const fg=new THREE.Mesh(new THREE.PlaneGeometry(1.4,.18),new THREE.MeshBasicMaterial({color:0x33ee66,depthTest:false}));
+  fg.position.z=.01; g.add(bg); g.add(fg); g.position.y=1.2; g.userData={fg}; return g; }
+function setHP(bar,frac){ const fg=bar.userData.fg; fg.scale.x=Math.max(.001,frac); fg.position.x=-(1-frac)*0.7;
+  fg.material.color.setHex(frac>.5?0x33ee66:frac>.25?0xffcc33:0xff4444); }
+function billboard(o){ o.quaternion.copy(camera.quaternion); }
+function makeCube(color){ const m=new THREE.Mesh(new THREE.BoxGeometry(1.2,1.2,1.2),
+  new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:.14,metalness:.3,roughness:.4}));
+  m.position.y=.6; m.castShadow=true; scene.add(m);
+  const lab=makeLabel(), hp=makeHP(); m.add(lab); m.add(hp);
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(1.1,.08,8,24),new THREE.MeshBasicMaterial({color:0x66ffcc}));
+  ring.rotation.x=Math.PI/2; ring.visible=false; m.add(ring);
+  const gun=new THREE.Mesh(new THREE.BoxGeometry(.28,.28,1.0),new THREE.MeshStandardMaterial({color:0x222a44,emissive:0x111}));
+  gun.position.set(0,0,.7); m.add(gun); m.userData={lab,hp,ring,gun}; return m; }
+const me=makeCube(0x4fd1ff), rival=makeCube(0xff6bd6);
+
+/* particles */
+const parts=[]; const pGeo=new THREE.BoxGeometry(.18,.18,.18);
+function burst(x,z,color,n=14,spd=7,y=.7){ for(let i=0;i<n;i++){ const m=new THREE.Mesh(pGeo,new THREE.MeshBasicMaterial({color}));
+  m.position.set(x,y,z); const a=Math.random()*Math.PI*2,s=spd*(.4+Math.random());
+  m.userData={vx:Math.cos(a)*s,vy:3+Math.random()*4,vz:Math.sin(a)*s,life:.6+Math.random()*.3}; scene.add(m); parts.push(m);} }
+function updateParts(dt){ for(let i=parts.length-1;i>=0;i--){ const m=parts[i],u=m.userData;
+  u.vy-=18*dt; m.position.x+=u.vx*dt; m.position.y+=u.vy*dt; m.position.z+=u.vz*dt;
+  if(m.position.y<.1){m.position.y=.1;u.vy*=-.4;u.vx*=.6;u.vz*=.6;} u.life-=dt; m.scale.setScalar(Math.max(.01,u.life*1.5));
+  if(u.life<=0){scene.remove(m);parts.splice(i,1);} } }
+
+/* projectiles */
+const bullets=[]; const bGeo=new THREE.SphereGeometry(.22,8,8);
+function spawnBullet(x,z,dx,dz,owner,color){ const m=new THREE.Mesh(bGeo,new THREE.MeshBasicMaterial({color}));
+  m.position.set(x,.7,z); m.userData={vx:dx,vz:dz,life:1.3,owner}; scene.add(m); bullets.push(m);
+  const L=new THREE.PointLight(color,.6,4); m.add(L); }
+function updateBullets(dt,t){ for(let i=bullets.length-1;i>=0;i--){ const b=bullets[i],u=b.userData;
+  b.position.x+=u.vx*dt; b.position.z+=u.vz*dt; u.life-=dt;
+  const lim=ARENA/2-.4; let dead=u.life<=0||Math.abs(b.position.x)>lim||Math.abs(b.position.z)>lim;
+  // my bullets hit rival (I'm authoritative for my own shots)
+  if(u.owner==='me' && state==='play' && rival.visible && now()<rivalDeadVis &&
+     Math.hypot(b.position.x-rival.position.x,b.position.z-rival.position.z)<1.0){
+    const kx=u.vx*.06,kz=u.vz*.06; send({t:'hit',x:kx,z:kz,dmg:14}); burst(b.position.x,b.position.z,0xffcc55,8,6); dead=true;
+  }
+  if(dead){ scene.remove(b); bullets.splice(i,1); } } }
+
+/* ===== state ===== */
+let state='menu', isHost=false, connected=false;
+let myName='Player', myColor=0x4fd1ff, rivName='Rival', rivColor=0xff6bd6;
+let myScore=0, rivalScore=0, timeLeft=60;
+let myRounds=0, rivalRounds=0, round=1;
+let myHP=100, MAXHP=100, deadUntil=0, rivalDeadVis=1e9;
+let dashTime=0, dashCd=0, dashDir={x:1,z:0}, invUntil=0;
+let fireCd=0, lavaTick=0;
+let combo=0, comboUntil=0;
+const coins=new Map(); const powers=new Map(); let nextId=1, spawnT=0, pSpawnT=3;
+const myBuff={speed:0,shield:0,magnet:0,rapid:0,triple:0}, rivBuff={magnet:0};
+let shake=0;
+const keys={}; let mouseDown=false;
+addEventListener('keydown',e=>{keys[e.code]=true; if(e.code==='Space')e.preventDefault(); ac();});
+addEventListener('keyup',e=>keys[e.code]=false);
+const $=id=>document.getElementById(id); const now=()=>performance.now()/1000;
+
+/* aim */
+const ray=new THREE.Raycaster(); const aimPlane=new THREE.Plane(new THREE.Vector3(0,1,0),-0.6);
+const mouseV=new THREE.Vector2(0,0); const aimPt=new THREE.Vector3(5,0.6,0);
+addEventListener('mousemove',e=>{ mouseV.x=e.clientX/innerWidth*2-1; mouseV.y=-(e.clientY/innerHeight*2-1); });
+renderer.domElement.addEventListener('mousedown',e=>{ if(e.button===0){mouseDown=true; ac();} });
+addEventListener('mouseup',e=>{ if(e.button===0) mouseDown=false; });
+
+function setScore(){ $('score').innerHTML=`<span class="you">${myName} ${myScore}</span> &nbsp;—&nbsp; <span class="riv">${rivalScore} ${rivName}</span>`; }
+function setTimer(){ $('timer').textContent='⏱ '+Math.max(0,Math.ceil(timeLeft)); }
+function setRounds(){ const y='🟦'.repeat(myRounds)+'▫'.repeat(Math.max(0,2-myRounds));
+  const r='▫'.repeat(Math.max(0,2-rivalRounds))+'🟪'.repeat(rivalRounds); $('rounds').textContent=`${y}　ROUND ${round}　${r}`; }
+function setBuffs(){ const t=now(); let s=''; if(myBuff.speed>t)s+='👟'; if(myBuff.shield>t)s+='🛡'; if(myBuff.magnet>t)s+='🧲';
+  if(myBuff.rapid>t)s+='🔥'; if(myBuff.triple>t)s+='☄'; $('buffs').textContent=s;
+  me.userData.ring.visible=myBuff.shield>t||now()<invUntil; }
+function setCombo(){ $('combo').textContent= combo>1?`COMBO x${combo} 🔥`:''; }
+function flash(txt,color='#fff'){ const f=$('flash'); f.textContent=txt; f.style.color=color; f.style.opacity=1; setTimeout(()=>f.style.opacity=0,800); }
+function applyAppearance(){ me.material.color.setHex(myColor); me.material.emissive.setHex(myColor);
+  rival.material.color.setHex(rivColor); rival.material.emissive.setHex(rivColor);
+  setLabel(me.userData.lab,myName,'#5fe0ff'); setLabel(rival.userData.lab,rivName,'#ff99e0'); }
+
+/* coins & powerups */
+function addCoin(id,x,z){ const m=new THREE.Mesh(new THREE.CylinderGeometry(.42,.42,.14,18),
+  new THREE.MeshStandardMaterial({color:0xffd451,emissive:0x5a4000,metalness:.6,roughness:.3}));
+  m.position.set(x,.6,z); m.castShadow=true; scene.add(m); coins.set(id,m); }
+function delCoin(id){ const m=coins.get(id); if(m){scene.remove(m);coins.delete(id);} }
+const PCOL={speed:0x3bf0ff,shield:0x55ff99,magnet:0xc06bff,rapid:0xff7a3b,triple:0xffe14f,heal:0xff5b86};
+const PICON={speed:'👟',shield:'🛡',magnet:'🧲',rapid:'🔥',triple:'☄',heal:'❤'};
+const PNAME={speed:'スピードUP!',shield:'シールド!',magnet:'磁石ON!',rapid:'連射!',triple:'3WAYショット!',heal:'回復!'};
+function addPower(id,type,x,z){ const m=new THREE.Mesh(new THREE.IcosahedronGeometry(.5,0),
+  new THREE.MeshStandardMaterial({color:PCOL[type],emissive:PCOL[type],emissiveIntensity:.45,metalness:.4,roughness:.2}));
+  m.position.set(x,.7,z); m.castShadow=true; m.userData.type=type; scene.add(m); powers.set(id,m); }
+function delPower(id){ const m=powers.get(id); if(m){scene.remove(m);powers.delete(id);} }
+
+/* ===== networking ===== */
+let peer, conn; const PREFIX='coinarenadx-';
+function rand4(){const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let s='';for(let i=0;i<4;i++)s+=c[Math.random()*c.length|0];return s;}
+function bindConn(c){ conn=c; c.on('open',()=>{ connected=true; send({t:'hello',name:myName,color:myColor}); if(isHost) startMatch(); });
+  c.on('data',onNet); c.on('close',()=>{$('status').textContent='相手が切断しました';}); }
+function send(o){ if(conn&&conn.open) conn.send(o); }
+function hostRoom(){ isHost=true; const code=rand4(); peer=new Peer(PREFIX+code);
+  peer.on('open',()=>{showStep('waitStep'); $('roomCode').textContent=code;});
+  peer.on('connection',bindConn); peer.on('error',e=>{$('status').textContent='エラー: '+e.type; showStep('menuStep');}); }
+function joinRoom(code){ isHost=false; peer=new Peer();
+  peer.on('open',()=>{ $('status').textContent='接続中…'; const c=peer.connect(PREFIX+code,{reliable:false});
+    bindConn(c); c.on('open',()=>$('status').textContent='接続成功！');
+    setTimeout(()=>{if(!connected)$('status').textContent='見つかりません。コードを確認してね';},6000); });
+  peer.on('error',e=>$('status').textContent='エラー: '+e.type); }
+
+function onNet(m){ switch(m.t){
+  case 'hello': rivName=m.name||'Rival'; rivColor=m.color; applyAppearance(); setScore(); break;
+  case 'pos': rival.position.x=m.x; rival.position.z=m.z; rival.rotation.y=m.r; rivalDeadVis=m.dead?0:1e9; rival.visible=!m.dead;
+    if(m.hp!=null) setHP(rival.userData.hp,m.hp/MAXHP); break;
+  case 'shot': spawnBullet(m.x,m.z,m.dx,m.dz,'rival',rivColor); SFX.shoot(); break;
+  case 'state':
+    for(const id of [...coins.keys()]) if(!m.c.find(k=>k[0]===id)) delCoin(id);
+    for(const [id,x,z] of m.c){ if(!coins.has(id))addCoin(id,x,z); else {coins.get(id).position.x=x;coins.get(id).position.z=z;} }
+    for(const id of [...powers.keys()]) if(!m.p.find(k=>k[0]===id)) delPower(id);
+    for(const [id,ty,x,z] of m.p) if(!powers.has(id)) addPower(id,ty,x,z);
+    rivalScore=m.host; myScore=m.guest; timeLeft=m.time; setScore(); setTimer(); break;
+  case 'pick': if(isHost) hostPick(m.id,true); break;
+  case 'ppick': if(isHost) hostPickPower(m.id,true); break;
+  case 'pwr': rivBuff.magnet=m.k==='magnet'?m.until:rivBuff.magnet; break;
+  case 'hit': takeHit(m.x,m.z,m.dmg); break;
+  case 'died': flash('💀 '+rivName+' を撃破！','#ffd451'); SFX.kill(); shake=.9; myScore+=25; if(isHost) setScore();
+    burst(rival.position.x,rival.position.z,0xff3344,34,12); break;
+  case 'start': beginMatch(); break;
+  case 'roundover': roundEnd(m.host,m.guest,m.myR,m.rivR,m.over); break;
+} }
+
+/* combat */
+function takeHit(kx,kz,dmg){ if(state!=='play'||now()<deadUntil||now()<invUntil) return;
+  if(myBuff.shield>now()){ flash('🛡 ガード!','#66ffcc'); return; }
+  me.position.x+=kx; me.position.z+=kz; myHP-=dmg; SFX.hurt(); shake=Math.max(shake,.4);
+  burst(me.position.x,me.position.z,0xff5555,12,7); setHP(me.userData.hp,Math.max(0,myHP)/MAXHP);
+  if(myHP<=0) die(); }
+function die(){ deadUntil=now()+2.2; me.visible=false; send({t:'died'}); shake=.7;
+  burst(me.position.x,me.position.z,0xff3344,34,12); flash('やられた…','#ff6666');
+  combo=0; setCombo();
+  if(isHost){ for(let i=0;i<3;i++) scatterCoin(me.position.x,me.position.z); }
+  setTimeout(()=>{ myHP=MAXHP; me.visible=true; invUntil=now()+1.5;
+    me.position.set((Math.random()-.5)*9,.6,(Math.random()-.5)*9); setHP(me.userData.hp,1); },2200); }
+
+/* shooting */
+function fire(){ const t=now();
+  let dx=aimPt.x-me.position.x, dz=aimPt.z-me.position.z; const L=Math.hypot(dx,dz)||1; dx/=L; dz/=L;
+  const SP=24; const make=(ang)=>{ const c=Math.cos(ang),s=Math.sin(ang); const rx=dx*c-dz*s, rz=dx*s+dz*c;
+    spawnBullet(me.position.x+rx*1.1,me.position.z+rz*1.1,rx*SP,rz*SP,'me',myColor);
+    send({t:'shot',x:+(me.position.x+rx*1.1).toFixed(2),z:+(me.position.z+rz*1.1).toFixed(2),dx:+(rx*SP).toFixed(2),dz:+(rz*SP).toFixed(2)}); };
+  if(myBuff.triple>t){ make(-.22); make(0); make(.22); } else make(0);
+  SFX.shoot(); shake=Math.max(shake,.12);
+  fireCd=myBuff.rapid>t?.12:.3;
+}
+
+/* match flow */
+function startMatch(){ myRounds=rivalRounds=0; round=1; send({t:'start'}); beginMatch(); }
+function beginMatch(){
+  coins.forEach(m=>scene.remove(m)); coins.clear(); powers.forEach(m=>scene.remove(m)); powers.clear();
+  bullets.forEach(b=>scene.remove(b)); bullets.length=0;
+  myScore=rivalScore=0; timeLeft=60; nextId=1; spawnT=0; pSpawnT=3; deadUntil=0; invUntil=now()+1; combo=0;
+  myHP=MAXHP; me.visible=true; rival.visible=true; rivalDeadVis=1e9; setHP(me.userData.hp,1); setHP(rival.userData.hp,1);
+  for(const k in myBuff)myBuff[k]=0; rivBuff.magnet=0;
+  me.position.set(isHost?-6:6,.6,0); rival.position.set(isHost?6:-6,.6,0);
+  state='play'; $('overlay').classList.add('hidden'); applyAppearance(); setScore(); setTimer(); setRounds(); setBuffs(); setCombo();
+  flash('ROUND '+round,'#ffd451'); SFX.round();
+}
+function roundEnd(hostScore,guestScore,hR,rR,over){
+  myRounds=isHost?hR:rR; rivalRounds=isHost?rR:hR;
+  myScore=isHost?hostScore:guestScore; rivalScore=isHost?guestScore:hostScore; setRounds(); setScore();
+  if(over){ state='over'; $('overlay').classList.remove('hidden'); showStep('resultStep');
+    const win=myRounds>rivalRounds; $('resultTitle').textContent=win?'🏆 総合優勝！':'😢 敗北…';
+    $('resultMsg').textContent=`ラウンド ${myRounds} - ${rivalRounds}`; win?SFX.win():SFX.lose(); flash(win?'WIN!':'LOSE','#ffd451');
+  } else { const rwin=(isHost?hostScore>guestScore:guestScore>hostScore); flash(rwin?'ラウンド勝利!':'ラウンド敗北','#ffd451');
+    state='wait'; if(isHost){ setTimeout(()=>{ round++; send({t:'start'}); beginMatch(); },2200); } }
+}
+function addCombo(){ const t=now(); combo=(t<comboUntil)?Math.min(5,combo+1):1; comboUntil=t+3; setCombo(); return combo; }
+function hostPick(id,byGuest){ if(!coins.has(id))return; const m=coins.get(id); burst(m.position.x,m.position.z,0xffd451); delCoin(id);
+  if(byGuest){ rivalScore+=10; } else { myScore+=10*addCombo(); } SFX.coin(); setScore(); }
+function hostPickPower(id,byGuest){ if(!powers.has(id))return; const m=powers.get(id),ty=m.userData.type;
+  burst(m.position.x,m.position.z,PCOL[ty],20,9); delPower(id);
+  if(byGuest){ if(ty==='magnet') rivBuff.magnet=now()+6; } else activateBuff(ty); }
+function activateBuff(ty){ const t=now();
+  if(ty==='heal'){ myHP=Math.min(MAXHP,myHP+50); setHP(me.userData.hp,myHP/MAXHP); }
+  else { const dur=ty==='magnet'?6:5; myBuff[ty]=t+dur; }
+  SFX.power(); flash(PICON[ty]+' '+PNAME[ty],'#9ff'); if(ty==='magnet') send({t:'pwr',k:'magnet',until:myBuff.magnet}); }
+function scatterCoin(x,z){ addCoin(nextId++,x+(Math.random()-.5)*2,z+(Math.random()-.5)*2); }
+
+/* ===== loop ===== */
+const clock=new THREE.Clock();
+function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),.05); const t=now();
+  updateParts(dt); updateBullets(dt,t);
+  billboard(me.userData.lab); billboard(me.userData.hp); billboard(rival.userData.lab); billboard(rival.userData.hp);
+  me.userData.ring.rotation.z+=.1; rival.userData.ring.rotation.z+=.1;
+  lavaRing.rotation.z+=dt*.6; lavaLight.intensity=1+Math.sin(t*6)*.3; lava.material.emissiveIntensity=.6+Math.sin(t*5)*.15;
+  if(t>comboUntil&&combo>1){combo=0;setCombo();}
+  // aim point via ray
+  ray.setFromCamera(mouseV,camera); ray.ray.intersectPlane(aimPlane,aimPt);
+
+  if(state==='play' && t>=deadUntil){
+    let mx=0,mz=0;
+    if(keys['KeyW']||keys['ArrowUp'])mz-=1; if(keys['KeyS']||keys['ArrowDown'])mz+=1;
+    if(keys['KeyA']||keys['ArrowLeft'])mx-=1; if(keys['KeyD']||keys['ArrowRight'])mx+=1;
+    const len=Math.hypot(mx,mz)||1; mx/=len; mz/=len;
+    let spd=8.5*(myBuff.speed>t?1.6:1);
+    dashCd-=dt;
+    if(keys['ShiftLeft']&&dashCd<=0&&dashTime<=0&&(mx||mz)){ dashTime=.18; dashCd=1.1; invUntil=t+.32; dashDir={x:mx,z:mz}; SFX.dash(); }
+    if(dashTime>0){ dashTime-=dt; spd=30; mx=dashDir.x; mz=dashDir.z; burst(me.position.x,me.position.z,myColor,2,3); }
+    me.position.x+=mx*spd*dt; me.position.z+=mz*spd*dt;
+    const lim=ARENA/2-1.2; me.position.x=Math.max(-lim,Math.min(lim,me.position.x)); me.position.z=Math.max(-lim,Math.min(lim,me.position.z));
+    // face aim
+    me.rotation.y=Math.atan2(aimPt.x-me.position.x,aimPt.z-me.position.z);
+    // shooting
+    fireCd-=dt;
+    if((mouseDown||keys['Space'])&&fireCd<=0) fire();
+    // lava damage
+    if(Math.hypot(me.position.x,me.position.z)<LAVA_R+0.4){ lavaTick-=dt;
+      if(lavaTick<=0 && now()>=invUntil && myBuff.shield<t){ myHP-=7; setHP(me.userData.hp,Math.max(0,myHP)/MAXHP);
+        SFX.lava(); burst(me.position.x,me.position.z,0xff6622,6,5); shake=Math.max(shake,.25); lavaTick=.5; if(myHP<=0)die(); } }
+    send({t:'pos',x:+me.position.x.toFixed(2),z:+me.position.z.toFixed(2),r:+me.rotation.y.toFixed(2),hp:Math.max(0,myHP),dead:false});
+    // magnet pull
+    if(myBuff.magnet>t){ for(const [id,m] of coins){ const dx=me.position.x-m.position.x,dz=me.position.z-m.position.z;
+      const d=Math.hypot(dx,dz); if(d<5.5&&d>.1){ m.position.x+=dx/d*8*dt; m.position.z+=dz/d*8*dt; } } }
+
+    if(isHost){
+      timeLeft-=dt; setTimer(); spawnT-=dt;
+      if(spawnT<=0&&coins.size<10){ let x,z; do{x=(Math.random()-.5)*(ARENA-4);z=(Math.random()-.5)*(ARENA-4);}while(Math.hypot(x,z)<LAVA_R+1);
+        addCoin(nextId++,x,z); spawnT=.65+Math.random()*.5; }
+      pSpawnT-=dt;
+      if(pSpawnT<=0&&powers.size<2){ const ty=['speed','shield','magnet','rapid','triple','heal'][Math.random()*6|0];
+        let x,z; do{x=(Math.random()-.5)*(ARENA-5);z=(Math.random()-.5)*(ARENA-5);}while(Math.hypot(x,z)<LAVA_R+1);
+        addPower(nextId++,ty,x,z); pSpawnT=6+Math.random()*4; }
+      const myR=1.0+(myBuff.magnet>t?1.1:0), rR=1.0+(rivBuff.magnet>t?1.1:0);
+      for(const [id,m] of coins){ m.rotation.y+=dt*4;
+        if(me.visible&&Math.hypot(m.position.x-me.position.x,m.position.z-me.position.z)<myR) hostPick(id,false);
+        else if(rival.visible&&Math.hypot(m.position.x-rival.position.x,m.position.z-rival.position.z)<rR) hostPick(id,true); }
+      for(const [id,m] of powers){ m.rotation.y+=dt*3; m.position.y=.7+Math.sin(t*3+id)*.12;
+        if(me.visible&&Math.hypot(m.position.x-me.position.x,m.position.z-me.position.z)<1.2) hostPickPower(id,false);
+        else if(rival.visible&&Math.hypot(m.position.x-rival.position.x,m.position.z-rival.position.z)<1.2) hostPickPower(id,true); }
+      const c=[...coins.entries()].map(([id,m])=>[id,+m.position.x.toFixed(1),+m.position.z.toFixed(1)]);
+      const p=[...powers.entries()].map(([id,m])=>[id,m.userData.type,+m.position.x.toFixed(1),+m.position.z.toFixed(1)]);
+      send({t:'state',c,p,host:myScore,guest:rivalScore,time:+timeLeft.toFixed(1)});
+      if(timeLeft<=0){ const hWin=myScore>rivalScore,gWin=rivalScore>myScore;
+        if(hWin)myRounds++; else if(gWin)rivalRounds++; const over=myRounds>=2||rivalRounds>=2;
+        send({t:'roundover',host:myScore,guest:rivalScore,myR:myRounds,rivR:rivalRounds,over}); roundEnd(myScore,rivalScore,myRounds,rivalRounds,over); }
+    } else {
+      for(const [id,m] of coins){ m.rotation.y+=dt*4;
+        if(Math.hypot(m.position.x-me.position.x,m.position.z-me.position.z)<(myBuff.magnet>t?2.0:1.0)){ send({t:'pick',id}); delCoin(id); SFX.coin(); addCombo(); burst(m.position.x,m.position.z,0xffd451);} }
+      for(const [id,m] of powers){ m.rotation.y+=dt*3;
+        if(Math.hypot(m.position.x-me.position.x,m.position.z-me.position.z)<1.2){ send({t:'ppick',id}); activateBuff(m.userData.type); delPower(id);} }
+    }
+    setBuffs();
+  } else if(state==='play' && t<deadUntil){
+    send({t:'pos',x:+me.position.x.toFixed(2),z:+me.position.z.toFixed(2),r:+me.rotation.y.toFixed(2),hp:0,dead:true});
+  }
+
+  // camera with shake
+  shake=Math.max(0,shake-dt*2.2);
+  camera.position.set(CAMBASE.x+(Math.random()-.5)*shake*2, CAMBASE.y+(Math.random()-.5)*shake*2, CAMBASE.z+(Math.random()-.5)*shake*2);
+  camera.lookAt(0,0,0);
+  renderer.render(scene,camera);
+}
+animate();
+
+/* ===== UI ===== */
+const COLORS=[0x4fd1ff,0xff6bd6,0x6bff8e,0xffd451,0xff7a4f,0xb06bff,0xff4f6b,0xffffff];
+const swEl=$('swatches');
+COLORS.forEach((c,i)=>{ const d=document.createElement('div'); d.className='sw'+(i===0?' on':''); d.style.background='#'+c.toString(16).padStart(6,'0');
+  d.onclick=()=>{ myColor=c; rivColor=(c===0xff6bd6)?0x4fd1ff:0xff6bd6; [...swEl.children].forEach(x=>x.classList.remove('on')); d.classList.add('on'); applyAppearance(); };
+  swEl.appendChild(d); });
+$('nameInput').value='Player'+(Math.random()*900+100|0);
+function grabProfile(){ myName=($('nameInput').value.trim()||'Player').slice(0,10); applyAppearance(); setScore(); }
+function showStep(id){ document.querySelectorAll('.step').forEach(s=>s.classList.remove('on')); $(id).classList.add('on'); }
+$('makeRoom').onclick=()=>{ac();grabProfile();hostRoom();};
+$('joinRoom').onclick=()=>{ ac();grabProfile(); const v=$('joinInput').value.trim().toUpperCase(); if(v.length!==4)return $('status').textContent='4文字を入力してね'; joinRoom(v); };
+$('joinInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('joinRoom').click();});
+$('againBtn').onclick=()=>{ if(isHost) startMatch(); else $('resultMsg').textContent='ホストが「もう一度」を押すのを待ってね'; };
+applyAppearance();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+</script>
+</body>
+</html>
